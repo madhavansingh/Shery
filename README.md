@@ -12,9 +12,9 @@
 [![BullMQ Engine](https://img.shields.io/badge/Queue-BullMQ_Engine-purple.svg)](https://docs.bullmq.io/)
 [![Supabase Storage](https://img.shields.io/badge/Storage-Supabase_Storage-green.svg)](https://supabase.com/)
 
-**An enterprise-grade, async-first ingestion and retrieval infrastructure stack designed to process, segment, embed, index, and query unstructured media at scale with absolute grounding and zero hallucinations.**
+**An enterprise-grade, async-first ingestion and retrieval infrastructure stack designed to process, segment, embed, index, and query unstructured media at scale with absolute grounding and verified context retrieval.**
 
-[Architecture](#system-architecture) • [AI Processing](#ai-processing-pipeline) • [Retrieval Engine](#semantic-retrieval-engine) • [Orchestration](#backend-orchestration) • [Topology](#deployment-topology) • [Lifecycle](#knowledge-processing-lifecycle)
+[System Architecture](#system-architecture) • [Control vs Data Plane](#control-plane-vs-data-plane) • [Request Lifecycles](#request-lifecycle-sequence-blueprints) • [AI Pipeline](#ai-processing-pipeline) • [Retrieval Engine](#semantic-retrieval-engine) • [Orchestration](#backend-orchestration) • [Failure Recovery](#failure-recovery--resilience) • [Deployment Topology](#deployment-topology) • [Security & Boundaries](#security-boundary-mapping)
 
 </div>
 
@@ -94,6 +94,97 @@ flowchart TB
 
 ---
 
+## Control Plane vs Data Plane
+
+To ensure maximum runtime reliability and operational throughput under high concurrent ingestion workloads, the system strictly segregates its components into two functional planes:
+
+### Control Plane
+Governs system state, schedules tasks, and orchestrates resource allocations.
+*   **Queue Coordination**: BullMQ manages job schedules, state machines, and active job distribution.
+*   **Storage Access Control**: Handles generation of short-lived signed URLs (TTL 3600s) for private Supabase Storage buckets, isolating raw files.
+*   **Worker Lifecycle Monitoring**: Employs lock extenders (`lockRenewTime: 60s`) and heartbeats to ensure workers are healthy and restart stalled tasks.
+*   **Database Coordination**: Firestore logs operational metadata, task statuses, user sessions, and task logs.
+
+### Data Plane
+Moves, parses, processes, and queries the actual learning content payloads.
+*   **Text/Audio Extraction**: Sandboxed FFmpeg demuxes audio tracks to mono-channel MP3s, and PDF parsing engines extract textual content.
+*   **Vectorization**: NVIDIA NIM generates 1024-dimension float coordinate embeddings from chunks.
+*   **Vector Operations**: Qdrant stores, indexes, and queries vector points with high-speed payload filters (`workspaceId` and `sourceId`).
+*   **Stream Transport**: Pipes Server-Sent Events (SSE) token streams to the frontend.
+
+---
+
+## System Constraints & Tradeoffs
+
+Architectural choices are selected based on distributed systems tradeoffs, balancing simplicity, performance, and fault tolerance:
+
+*   **Server-Sent Events (SSE) vs. WebSockets**: Chosen for text-streaming responses. SSE operates natively over standard HTTP, features automatic reconnection, and bypasses the proxy-traversal and frame-handshake complexity associated with full bidirectional WebSockets.
+*   **BullMQ vs. Kafka**: BullMQ on Redis provides lightweight, transaction-safe task queues with instant state change hooks, fitting our workflow-state pipeline better than a partition-centric commit log like Kafka.
+*   **Qdrant vs. Pinecone**: Qdrant was selected for its native support for direct payload-based metadata filtering (`workspaceId` and `sourceId`), ensuring strict workspace isolation at the database level and avoiding global search space leakage.
+*   **Local BM25 Fallback**: If the Qdrant Cloud cluster experiences latency spikes or outages, retrieval degrades gracefully to an in-memory BM25 lexical keyword search, ensuring chat and assessment features remain available.
+*   **Chunk Overlap Allocation**: Chunking uses a `384` token boundary with a `48` token overlap. This balances retrieval granularity (preventing context fragmentation) with LLM attention window constraints.
+*   **Process Segregation**: Segregating API gateways (`RUN_API=true`) from workers (`RUN_WORKERS=true`) ensures that CPU-intensive operations like FFmpeg demuxing do not block event loops handling HTTP requests.
+
+---
+
+## Request Lifecycle Sequence Blueprints
+
+### 1. Context-Grounded Chat Request Lifecycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as User Client
+    participant API as API Web Server
+    participant Qdrant as Qdrant Vector DB
+    participant LLM as NVIDIA NIM Inference
+    
+    Client->>API: POST /api/workspaces/:id/chats (with AbortSignal)
+    Note over API: Initialize Express Request & CORS Checks
+    
+    API->>Qdrant: Execute Hybrid Search (Workspace Filter + BM25)
+    Qdrant-->>API: Return Scored Context Chunks (Top-K)
+    
+    API->>API: Inject Retrieval Constrained Prompt & Guardrails
+    
+    API->>LLM: generateContentStream(Contextualized Prompt, AbortSignal)
+    
+    loop Stream Tokens
+        LLM-->>API: Stream Data Token Chunk
+        API-->>Client: Server-Sent Event (SSE Token Stream)
+    end
+    
+    LLM-->>API: Stream End
+    API-->>Client: Close SSE Connection
+```
+
+### 2. Ingestion Cancellation and Abort Propagation
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as User Client
+    participant API as API Web Server
+    participant LLM as NVIDIA NIM Inference
+    
+    Client->>API: POST /api/workspaces/:id/chats (with AbortSignal)
+    API->>LLM: Open Completion Stream
+    
+    Note over Client: User closes tab / clicks cancel
+    Client->>API: Terminate TCP Connection (Client Disconnect)
+    
+    Note over API: req.on('close') Event Fires
+    API->>API: Trigger AbortController.abort()
+    
+    API->>LLM: Send Abort Signal to Upstream API
+    Note over LLM: Instantly terminate completion processing
+    
+    API->>API: Wipe temporary stream memory buffers
+    API-->>Client: Stream terminated gracefully
+```
+
+---
+
 ## AI Processing Pipeline
 
 The platform utilizes a strict 7-stage transactional state machine. Every step is logged as a state checkpoint in Firestore and piped directly to the user interface in real time.
@@ -154,7 +245,7 @@ stateDiagram-v2
 
 ## Semantic Retrieval Engine
 
-SheryAI utilizes a hybrid search pipeline that combines dense vector semantic matching with classical lexical keyword lookups to deliver optimal grounded context results.
+SheryAI utilizes a hybrid search pipeline that combines dense vector semantic matching with classical lexical keyword lookups to deliver grounded context results.
 
 ```mermaid
 flowchart TD
@@ -188,45 +279,27 @@ flowchart TD
 * **Source Diversity Capping**: Limits the number of results from any single file to a maximum of `60%` of the total top-K return block. This ensures that the context provided to the model is diverse, rather than being dominated by a single source.
 * **Conversational Memory**: Chat sessions manage conversational history via Firebase Firestore array bindings, capped at a maximum of `40` messages to optimize memory footprint and respect token window boundaries during upstream completions.
 
-### Streaming Request Lifecycle
+---
 
-To deliver a premium, near-instant user interface, responses are computed and streamed using Server-Sent Events (SSE). Cancelable abort signals are wired from the browser directly to the inference layers to prevent orphaned processing costs.
+## Observability & Runtime Telemetry
+
+Runtime visibility is achieved through a structured telemetry and logging pipeline, ensuring operational visibility at every stage:
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor Student as Student Browser
-    participant API as API Web Server
-    participant Vector as Vector Engine (Qdrant)
-    participant Model as NVIDIA NIM Inference
+flowchart LR
+    Worker[Worker Node] -->|JSON Log Appender| Logger[Winston Logger]
+    Logger -->|Structured Stream| Console[Stdout / CloudWatch / Railway Logs]
     
-    Student->>API: POST /api/workspaces/:id/chats (with AbortSignal)
-    Note over API: Initialize Express Request
+    API[API Node] -->|SSE Stream Monitor| SSETracker[Stream Telemetry]
+    SSETracker -->|Connection State / Token Count| ActiveSession[In-Memory Telemetry Stats]
     
-    API->>Vector: Hybrid Search (Workspace Vectors + BM25)
-    Vector-->>API: Scored Context Chunks (Top-K)
-    
-    API->>API: Compile Context Prompts & Cognitive Guardrails
-    
-    API->>Model: generateContentStream(Prompt, AbortSignal)
-    
-    loop Stream Tokens
-        Model-->>API: Stream Data Chunk
-        API-->>Student: Server-Sent Event (SSE Token stream)
-        Note over Student: Render Token Stream in UI (Optimistic Rendering)
-    end
-    
-    alt User Closes Tab / Cancels Stream
-        Student->>API: Abort Request (TCP Close)
-        Note over API: Detect Request Closure (req.on('close'))
-        API->>Model: Trigger AbortController.abort()
-        Note over Model: Terminate Upstream Completion Stream
-        API->>API: Clean Temporary Memory Allocations
-    end
-    
-    Model-->>API: Stream End
-    API-->>Student: Close SSE Connection
+    Queue[BullMQ Queue] -->|Metrics Event Listener| QueueTelemetry[Queue Monitor]
+    QueueTelemetry -->|Active / Completed / Stalled Jobs| CloudMonitor[Observability Dashboard]
 ```
+
+*   **Ingestion Timings**: Winston structures logs with trace contexts (`workspaceId`, `sourceId`, `jobId`), capturing processing durations for validation, audio extraction, chunking, and vector indexing.
+*   **Queue States**: Listeners attach to BullMQ queue transitions, recording job statuses (`active`, `completed`, `failed`, `stalled`) and reporting queue depth.
+*   **Streaming Metrics**: The SSE connection engine monitors byte count and token metrics per stream, recording generation rates and tracking AbortController triggers.
 
 ---
 
@@ -268,11 +341,16 @@ flowchart LR
 
 ### Queue Resilience Architecture
 
-* **Isolated Processing**: Background workers run as distinct, decoupled nodes. If a heavy FFmpeg encoding task crashes a worker container, the main Express API server continues handling traffic without interruption.
-* **Concurrency Capping**: Configures strict limits on active concurrent processes (`concurrency: 2` for general ingestion, `concurrency: 3` for uploads) to prevent background CPU exhaustion on host systems.
-* **Redis Connection Singleton**: All queues and workers reuse the same centralized, validated connection singleton exported from `redis.js`, ensuring we do not exhaust Redis connection limits.
-* **Task Lock Extenders**: Spawns lock renewal processes (`lockRenewTime: 60s` on a 5-minute lock duration) to prevent long-running transcription jobs from being misclassified as stalled and picked up twice.
-* **Worker Lifecycle & Cleanup**: To guarantee absolute memory safety and prevent storage bloat, background workers follow a strict transactional job lifecycle, executing rollback cleanups immediately on failure.
+*   **Isolated Processing**: Background workers run as distinct, decoupled nodes. If a heavy FFmpeg encoding task crashes a worker container, the main Express API server continues handling traffic without interruption.
+*   **Concurrency Capping**: Configures limits on active concurrent processes (`concurrency: 2` for general ingestion, `concurrency: 3` for uploads) to prevent background CPU exhaustion on host systems.
+*   **Redis Connection Singleton**: All queues and workers reuse the same validated connection singleton from `redis.js` to prevent connection leaks.
+*   **Task Lock Extenders**: Spawns lock renewal processes (`lockRenewTime: 60s` on a 5-minute lock duration) to prevent long-running transcription jobs from timing out.
+
+---
+
+## Failure Recovery & Resilience
+
+The background processor handles faults gracefully by containing errors within sandboxed boundaries, isolated from main client gateways:
 
 ```mermaid
 stateDiagram-v2
@@ -300,59 +378,160 @@ stateDiagram-v2
     CleanSandboxFailed --> [*]
 ```
 
+### Ingestion Rollback Semantics
+When a fatal exception is intercepted during workers execution (e.g. an AssemblyAI timeout or Qdrant connection drop), the worker initiates a structured rollback transaction:
+1.  **Firestore Lock Release**: Sets the source document status to `failed` or `ready_without_vectors` (for non-fatal indexing drops).
+2.  **Supabase Cleanup**: Deletes raw file fragments uploaded during the session.
+3.  **Qdrant Purge**: Issues a delete request matching the `sourceId` to wipe partially indexed vectors.
+4.  **Sandbox Removal**: Executes `fs.rmSync(tempDir)` to free container storage.
+
 ---
 
-## Deployment Topology
+## Performance Characteristics
 
-The platform is designed to deploy on cost-effective serverless cloud providers, utilizing free tier limits.
+Systems optimization strategies are implemented to ensure low latency and resource safety:
+
+| System Component | Optimization Strategy | Target Metrics / Mechanics |
+| :--- | :--- | :--- |
+| **Streaming Engine** | Incremental Token Rendering | Pipes tokens via Server-Sent Events (SSE) immediately to bypass JSON buffering latency. |
+| **Retrieval Engine** | Hybrid RRF Scoring | Merges Qdrant dense vector cosine queries with local BM25 scoring, capping single-source retrieval at 60%. |
+| **Worker Ingestion** | Decoupled Concurrency Controls | Caps active operations per node (`concurrency: 2`) to prevent CPU context-switch overhead. |
+| **Storage Delivery** | Temporary Signed Access URLs | Supabase assets are accessed using signed URLs valid for 3600 seconds, protecting backend storage. |
+| **Cleanup Routines** | Scoped `finally` Garbage Collection | Ephemeral video and audio fragments are swept immediately upon completion or failure. |
+| **Queue Operations** | Non-blocking Redis Singletons | Reuses a single Redis connection across BullMQ registries, preventing TCP port exhaustion. |
+
+---
+
+## Distributed Processing Model
+
+SheryAI operates as a stateless distributed topology, dividing traffic handling from heavy media parsing:
+
+```mermaid
+graph TD
+    Client[Client Browser] -->|HTTPS Requests| APILayer[API Nodes: Express.js]
+    APILayer -->|Read/Write Metadata| Firestore[(Cloud Firestore DB)]
+    
+    APILayer -->|Enqueue Task| RedisQueue[(Upstash Redis Queue)]
+    WorkerLayer[Worker Nodes: BullMQ] <-->|Lock/De-queue Job| RedisQueue
+    
+    WorkerLayer -->|Upload / Download| Storage[(Supabase Storage)]
+    WorkerLayer -->|Generate Embeddings| NIM[NVIDIA NIM Gateway]
+    WorkerLayer -->|Index Vectors| Qdrant[(Qdrant Cloud Vector DB)]
+    APILayer -->|Query Vectors| Qdrant
+```
+
+*   **Stateless API Scaling**: API nodes have no local session state, allowing them to scale out horizontally behind load balancers.
+*   **Isolated Compute Nodes**: Worker nodes scale independently to allocate CPU/IO resources for transcription and video processing.
+*   **Decoupled State Sharing**: State sync between APIs and workers occurs asynchronously via Redis queues and Firestore metadata flags.
+
+---
+
+## Engineering Decisions
+
+*   **Queue Segregation**: Separating ingestion from API serving ensures that heavy background processes (like video transcription and embedding) do not block the event loop or exhaust memory on nodes serving HTTP requests.
+*   **Unidirectional SSE over WebSockets**: WebSockets introduce connection state complexity, heartbeats, and scale-out routing challenges. SSE utilizes standard HTTP routes, simplifying load balancing and supporting client connection cancellation natively via standard requests.
+*   **Custom BM25 Fallback**: By utilizing local in-memory BM25 indices as a secondary path, we protect the user experience from downstream cloud database outages, providing high availability.
+*   **Stateless Worker Architecture**: Background workers store no persistent application state locally. All segments are held in transient `/tmp/` sandboxes and finalized in Supabase Storage, enabling workers to crash and restart without data loss.
+
+---
+
+## Failure Domain Isolation & Fault Containment
+
+The architecture isolates faults to prevent cascading system failures:
+
+```mermaid
+graph TD
+    Client[Client Browser] -->|API Boundary| APINode[Express API Server]
+    APINode -->|Queue Boundary| Queue[Upstash Redis Queue]
+    Queue -->|Worker Boundary| WorkerNode[BullMQ Background Worker]
+    WorkerNode -->|Isolated Sandbox| TempFolder[/tmp/ws-vid-seg-*]
+    
+    subgraph FailureContainment ["Failure Containment Zones"]
+        TempFolder -.->|CPU/IO Exhaustion / Crash| WorkerNode
+        WorkerNode -.->|Worker Crash / OOM| Queue
+        Queue -.->|Queue Delay| APINode
+    end
+    
+    subgraph DataDegradation ["Data Fallback Paths"]
+        APINode -->|Primary Path| Qdrant[Qdrant Cloud Vector DB]
+        APINode -->|Graceful Fallback| BM25[Local BM25 Retrieval Engine]
+        Qdrant -.->|Connection Timeout / Offline| BM25
+    end
+```
+
+*   **API-Worker Separation**: A worker container crashing due to a heavy FFmpeg OOM does not impact the API gateway's ability to serve traffic or accept new jobs.
+*   **Compartmentalized Queues**: General ingestion, local video processing, and file uploads run on separate BullMQ queues. High traffic in video processing does not delay basic document parsing.
+*   **Fallback Retrieval**: If Qdrant experiences connection timeouts, the API switches automatically to BM25 query fallback, maintaining core workspace features.
+
+---
+
+## Resource Lifecycle Management
+
+*   **Temporary Sandbox**: Sandboxed directories `/tmp/ws-vid-seg-*` are allocated per video processing task. Worker classes delete these folders inside `finally` blocks, ensuring disk resources are cleaned up.
+*   **AbortSignal Tracking**: API handlers listen for client TCP connection terminations. Disconnects trigger abort events that propagate upstream to stop inference generation, saving computing credits.
+*   **Redis Connection Pools**: Standardizes on a single Winston-monitored Redis connection instance to prevent connection leaks under load.
+
+---
+
+## Consistency & Reliability Model
+
+*   **Eventual Index Consistency**: Ingested chunks are upserted to Qdrant Cloud. Collection indexing is eventual, meaning chunks become searchable immediately after the Qdrant sync commit completes.
+*   **Ingestion Idempotence**: Reprocessing the same PDF or video checks for document presence, updates Firestore metadata keys, and replaces existing Qdrant points with new vector inputs using identical chunk IDs.
+*   **Write Rollbacks**: If a task fails mid-way, the cleanup manager initiates `rollbackSource` to purge all draft metadata and vectors, preventing orphaned indexes.
+
+---
+
+## Security Boundary Mapping
+
+Network and access boundaries are structured to enforce least-privilege security:
 
 ```mermaid
 flowchart TD
-    subgraph Vercel_Network ["Vercel Edge Network"]
-        Client["React Frontend Application"]
+    subgraph PublicZone ["Public Trust Zone"]
+        Client[Client Browser]
     end
 
-    subgraph Railway_Compute ["Railway Cloud Instances"]
-        API["Web API Service (sheryai-api)"]
-        Worker["Worker Service (sheryai-worker)"]
+    subgraph EdgeZone ["Edge Security Zone"]
+        Vercel[Vercel CDN / WAF]
     end
 
-    subgraph Cloud_Storage ["Private Data Storage"]
-        Firebase["Firebase Firestore Spark"]
-        Supabase["Supabase Private File Storage"]
+    subgraph PrivateZone ["Secure VPC Zone"]
+        API[Express API Nodes]
+        Worker[BullMQ Worker Nodes]
+        Redis[(Upstash Redis Queue)]
+        Firestore[(Cloud Firestore Metadata)]
+        Supabase[(Supabase Private Storage)]
     end
 
-    subgraph Queue_State ["Cache & Session Manager"]
-        Upstash["Upstash Redis Cluster"]
+    subgraph ThirdPartyZone ["Third-Party AI Cloud APIs"]
+        Qdrant[(Qdrant Cloud Vector DB)]
+        NVIDIA[NVIDIA NIM Gateway]
+        Assembly[AssemblyAI Engine]
     end
 
-    subgraph External_AI ["Cloud Inference & NLP Services"]
-        Qdrant["Qdrant Cloud Vector Cluster"]
-        NVIDIA["NVIDIA NIM Gateway"]
-        Assembly["AssemblyAI Serverless Engine"]
-    end
-
-    Client <--> API
-    API <--> Upstash
-    Worker <--> Upstash
-    
-    API & Worker <--> Firebase
-    API & Worker <--> Supabase
-    
-    Worker --> Assembly
-    Worker --> NVIDIA
-    Worker --> Qdrant
-    API --> Qdrant
-    API --> NVIDIA
+    Client -->|HTTPS / JWT Auth| Vercel
+    Vercel -->|Reverse Proxy / HTTPS| API
+    API <-->|Private Network / TLS| Redis
+    Worker <-->|Private Network / TLS| Redis
+    API & Worker -->|IAM / Firebase Admin| Firestore
+    API & Worker -->|Private Signed URLs| Supabase
+    API & Worker -->|API Keys / HTTPS| Qdrant
+    API & Worker -->|API Keys / HTTPS| NVIDIA
+    Worker -->|API Keys / HTTPS| Assembly
 ```
 
-### Production Scaling Strategy
+*   **API Isolation**: API nodes authenticate all client requests by parsing JWT tokens via Firebase Admin SDK.
+*   **Private Asset Delivery**: Raw media files reside in private storage buckets. Access is mediated exclusively through temporary signed URLs.
+*   **Credential Containment**: Third-party credentials (NVIDIA, AssemblyAI, Qdrant keys) are kept isolated in backend runtime configurations and never leaked to the client browser.
 
-1. **Frontend Isolation**: The React application is deployed to Vercel's global edge network, ensuring fast asset delivery and static page loading.
-2. **Process Segregation**:
-   * **`sheryai-api`**: Configured with `RUN_API=true` and `RUN_WORKERS=false`. Exposes REST endpoints to clients.
-   * **`sheryai-worker`**: Configured with `RUN_API=false` and `RUN_WORKERS=true`. Runs as an isolated worker cluster to process ingestion tasks.
-3. **Serverless Cache Storage**: Utilizes Upstash Redis for BullMQ queue management. This keeps connection overhead minimal and ensures worker tasks run asynchronously.
+---
+
+## Operational Philosophy
+
+*   **Reliability over Hype**: Focus on robust distributed systems architecture rather than complex, ungrounded agentic loops.
+*   **Observability-first Design**: System behaviors, ingestion stages, and network failures are monitored via structured logging and tracing metrics.
+*   **Retrieval-grounded Inference**: Restricts model responses to verified database documents, preventing hallucinations.
+*   **Graceful Degradation**: Core features continue operating via BM25 lexical backups during downstream service disruptions.
 
 ---
 
@@ -401,39 +580,22 @@ sequenceDiagram
 
 ---
 
-## Performance Engineering
+## Future Systems Expansion
 
-* **Connection Leak Protection**: Express controller routes listen to client connection closures and map `req.signal` downstream via custom `AbortController` boundaries. If a user cancels a query, upstream AI streams are terminated instantly to save token costs.
-* **Thread-Safe Video Processing**: Background workers execute media operations within isolated sandboxed folders. Scoped `try...finally` boundaries ensure that temporary `/tmp/ws-vid-seg-*` directories are always cleaned up, even during unexpected task failures.
-* **Fail-Safe Qdrant Ingestion**: Qdrant health checks feature an automatic retry backoff loop with exponential delays. If Qdrant is offline, the workspace falls back to a custom local BM25 keyword matching algorithm, keeping the application functional.
-
----
-
-## Security and Reliability
-
-* **Secure Credentials**: Production configurations block all localhost fallbacks. The application crashes immediately at startup if keys like `REDIS_URL` or `QDRANT_URL` are missing or misconfigured.
-* **Helmet Hardening**: Configures 13 HTTP protection headers to defend against Cross-Site Scripting (XSS), clickjacking, and mime-sniffing exploits.
-* **CORS Origin Shields**: Hardened REST gateways to allow requests exclusively from Vercel deployment domains and verified local development hosts.
-* **Firebase Token Validation**: All authenticated workspace API routes enforce JWT token decoding and verify user ID matching prior to executing database queries.
-
----
-
-## Engineering Principles
-
-We believe learning should be active, conversational, and non-linear. 
-
-Traditional lectures are linear, passive streams of information that cannot be efficiently indexed, cross-referenced, or queried. Students waste valuable hours scrubbing through timelines to find a single concept, or struggling through dense slides with no interactive context.
-
-SheryAI shifts the paradigm. We turn static resources into conversational, structured partners. By linking interactive video control, automated vector grounding, and smart gap analysis, the application enables students to grasp complex topics faster, helps educators analyze student struggles, and ensures that knowledge is immediately accessible.
+*   **OpenTelemetry Integration**: Standardize metrics and traces by wiring OpenTelemetry SDKs into Express and BullMQ worker processes.
+*   **Retrieval Evaluation Framework**: Integrate automated pipelines (e.g. Ragas) to run continuous grounding and context recall checks on test datasets.
+*   **GraphRAG Cognitive Maps**: Parse document structures to construct graph nodes representing core lecture topics.
+*   **Distributed Vector Sharding**: Implement custom collection sharding partitions in Qdrant based on workspace tenants to support scale-out search.
+*   **Collaborative Workspaces**: Introduce real-time shared workspace states via delta sync protocols.
 
 ---
 
 ## Roadmap
 
-* **Multimodal Retrieval**: Parse slides, visual charts, and blackboard frames into the semantic workspace context.
-* **Collaborative Classrooms**: Allow multiple students to query a workspace concurrently, generating real-time group study graphs.
-* **Live Lecture Capture**: Process active video streams in real-time, building interactive workspaces as the instructor speaks.
-* **Autonomous Study Agents**: Spawn autonomous study agents to index research papers, test comprehension, and construct personalized study plans.
+*   **Multimodal Retrieval**: Parse slides, visual charts, and blackboard frames into the semantic workspace context.
+*   **Collaborative Classrooms**: Allow multiple students to query a workspace concurrently, generating real-time group study graphs.
+*   **Live Lecture Capture**: Process active video streams in real-time, building interactive workspaces as the instructor speaks.
+*   **Autonomous Study Agents**: Spawn autonomous study agents to index research papers, test comprehension, and construct personalized study plans.
 
 ---
 
@@ -441,9 +603,9 @@ SheryAI shifts the paradigm. We turn static resources into conversational, struc
 
 SheryAI is an open-source project created to provide next-generation academic tutoring capabilities. If you want to contribute to the codebase:
 
-* **Star the repository** to show your support and help other developers find us.
-* **Fork the project** and start contributing code updates.
-* **Submit issues** or feature requests on our tracker boards.
+*   **Star the repository** to show your support and help other developers find us.
+*   **Fork the project** and start contributing code updates.
+*   **Submit issues** or feature requests on our tracker boards.
 
 ---
 
