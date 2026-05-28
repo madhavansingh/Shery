@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AppIcon from '../components/AppIcon';
 
 const ROLES = [
@@ -35,10 +35,12 @@ const toneClasses = {
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const pick = (role) => {
     localStorage.setItem('demo_role', role.key);
-    navigate(role.dest);
+    const from = location.state?.from?.pathname || role.dest;
+    navigate(from);
   };
 
   return (

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 
 // ── Landing page (public, no auth) ────────────────────────
@@ -37,8 +37,9 @@ function PageLoader() {
 
 // Redirect to /login if no role is set
 function RoleGuard({ children }) {
+  const location = useLocation();
   const role = localStorage.getItem('demo_role');
-  if (!role) return <Navigate to="/login" replace />;
+  if (!role) return <Navigate to="/login" state={{ from: location }} replace />;
   return children;
 }
 
