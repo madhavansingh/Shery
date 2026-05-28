@@ -1,3 +1,4 @@
+import './src/config/env.js'; // Immediately bootstrap environment configuration first!
 import app from './src/app.js';
 import config from './src/config/env.js';
 import { initializeFirebase } from './src/config/firebase.js';
