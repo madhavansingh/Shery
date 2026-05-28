@@ -7,12 +7,58 @@ class FirebaseConfig {
     this.initialized = false;
   }
 
+  normalizePrivateKey(rawKey) {
+    if (!rawKey || typeof rawKey !== 'string') return rawKey;
+
+    let privateKey = rawKey.trim();
+
+    // 1. Resolve escaped newline characters
+    if (privateKey.includes('\\n')) {
+      privateKey = privateKey.replace(/\\n/g, '\n');
+    }
+
+    // 2. Resolve quote wrappers if accidentally injected
+    if (privateKey.startsWith('"') && privateKey.endsWith('"')) {
+      privateKey = privateKey.slice(1, -1);
+    }
+    if (privateKey.startsWith("'") && privateKey.endsWith("'")) {
+      privateKey = privateKey.slice(1, -1);
+    }
+
+    privateKey = privateKey.trim();
+
+    // 3. Railway/Docker fallback: If BEGIN/END markers exist but real PEM newlines are missing
+    if (
+      privateKey.includes('-----BEGIN PRIVATE KEY-----') &&
+      !privateKey.includes('\nMII')
+    ) {
+      privateKey = privateKey
+        .replace('-----BEGIN PRIVATE KEY-----', '-----BEGIN PRIVATE KEY-----\n')
+        .replace('-----END PRIVATE KEY-----', '\n-----END PRIVATE KEY-----');
+    }
+
+    // 4. Trace the normalized key preview
+    console.log(
+      'Normalized Firebase key preview:',
+      privateKey?.slice(0, 80)
+    );
+
+    // 5. Strict validation
+    if (!privateKey.includes('\n')) {
+      throw new Error(
+        'Firebase PEM normalization failed — missing multiline formatting'
+      );
+    }
+
+    return privateKey;
+  }
+
   parseServiceAccount() {
     if (config.firebaseServiceAccount) {
       try {
         const serviceAccount = JSON.parse(config.firebaseServiceAccount);
         if (typeof serviceAccount.private_key === 'string') {
-          serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+          serviceAccount.private_key = this.normalizePrivateKey(serviceAccount.private_key);
         }
         return serviceAccount;
       } catch (err) {
@@ -24,7 +70,7 @@ class FirebaseConfig {
       return {
         project_id: config.firebaseProjectId,
         client_email: config.firebaseClientEmail,
-        private_key: config.firebasePrivateKey.replace(/\\n/g, '\n'),
+        private_key: this.normalizePrivateKey(config.firebasePrivateKey),
       };
     }
 
