@@ -1,133 +1,123 @@
-# Shery Ai
+<div align="center">
 
-Backend API for the SheryAI learning companion.
+# SheryAI Backend
 
-## Video AI Feature
+### Production-Grade AI Ingestion, Semantic Retrieval, and Queue Orchestration Engine
 
-This server supports two reusable learning-video paths:
+[![Node.js Version](https://img.shields.io/badge/Node.js-%3E%3D20.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Qdrant Cloud](https://img.shields.io/badge/Vector_DB-Qdrant_Cloud-red.svg)](https://qdrant.tech/)
+[![Firebase Spark](https://img.shields.io/badge/Database-Firestore_Spark-orange.svg)](https://firebase.google.com/)
+[![BullMQ Engine](https://img.shields.io/badge/Queue-BullMQ_Engine-purple.svg)](https://docs.bullmq.io/)
+[![Supabase Storage](https://img.shields.io/badge/Storage-Supabase_Storage-green.svg)](https://supabase.com/)
 
-- Uploaded video/audio files are saved to Supabase Storage when Supabase is configured, with a local disk fallback in development only.
-- YouTube lessons ingest available captions directly from YouTube.
+**The asynchronous task coordination, RAG vector retrieval, and pipeline processing backend for the SheryAI learning platform.**
 
-After ingestion, AI chat, summaries, quizzes, starter questions, captions, and chapters read from transcript chunks stored in Firestore. They do not need to read the original video file again.
+[Architecture](#✦-backend-architecture) • [Ingestion](#✦-ai-ingestion-pipeline) • [Retrieval](#✦-retrieval-architecture) • [Deployment](#✦-deployment-topology)
 
-## Main Endpoints
+</div>
 
-- `POST /api/lessons/upload` receives multipart form data with `file`, `courseId`, `title`, optional `moduleId`, `description`, `language`, and `order`.
-- `POST /api/lessons/ingest-youtube` receives `youtubeUrl`, `courseId`, `title`, optional `moduleId`, `description`, and `order`.
-- `POST /api/lessons/ingest-url` receives a public `sourceUrl` for Google Drive, Zoom/direct recording links, or other readable media URLs.
-- `GET /api/lessons/:lessonId/status` returns processing state and progress.
-- `GET /api/lessons/:lessonId/video` redirects to a signed Supabase Storage URL or streams the local development file with HTTP Range support.
-- `GET /api/lessons/:lessonId/playback-url` returns a JSON playback URL for clients that want to set `<video src>` themselves.
-- `GET /api/lessons/:lessonId/transcript` returns ordered transcript chunks for captions/subtitles.
-- `POST /api/lessons/:lessonId/regenerate-chapters` regenerates chapter markers from saved transcript chunks.
-- `GET /api/lessons?courseId=...` returns dashboard lessons and hides failed lessons by default.
-- `GET /api/lessons/failed?courseId=...` returns only failed lessons plus a total count for the failed section.
-- `DELETE /api/lessons/failed?courseId=...` deletes all failed lessons for a course, including transcript chunks and stored video files when present.
-- `DELETE /api/lessons/:lessonId/failed` deletes one failed lesson.
-- `POST /api/chat/stream` streams tutor responses as Server-Sent Events.
-- `POST /api/chat/summary` creates a transcript-grounded summary.
-- `POST /api/chat/quiz` creates transcript-grounded MCQs.
+---
 
-## Required Environment
+## ✦ Backend Architecture
 
-```bash
-ASSEMBLYAI_API_KEY=...
-NVIDIA_API_KEY=...
+An asynchronous, ESM-native architecture designed to coordinate heavy computational workloads outside the HTTP request lifecycle:
+
+```mermaid
+flowchart TD
+    API["API Gateway: Express.js"] --> Queue["Queue: BullMQ Engine"]
+    Queue --> Workers["Workers: Isolated Job Nodes"]
+    Workers --> AI["AI Layer: AssemblyAI & NVIDIA NIM"]
+    Workers --> Vector["Vector DB: Qdrant Cloud"]
+    API --> Retrieval["Retrieval: Hybrid RRF Search"]
+    API --> Stream["SSE Streaming Response Engine"]
 ```
 
-Firebase credentials are still used for Firestore data. They can be provided either as one JSON value:
+---
 
-```bash
-FIREBASE_SERVICE_ACCOUNT='{"project_id":"...","client_email":"...","private_key":"..."}'
+## ✦ AI Ingestion Pipeline
+
+Unstructured media and documents are ingested through a 7-stage state machine:
+
+```mermaid
+flowchart LR
+    Upload["Media Upload"] --> Validation["Sanity & Scanned Checks"]
+    Validation --> Transcription["AssemblyAI Extraction"]
+    Transcription --> Chunking["Semantic Chunking (384/48)"]
+    Chunking --> Embedding["NVIDIA NIM Embeddings"]
+    Embedding --> Indexing["Qdrant Vector Upsert"]
+    Indexing --> RetrievalPrep["Cognitive Prep"]
 ```
 
-or as split variables:
+---
 
-```bash
-FIREBASE_PROJECT_ID=...
-FIREBASE_CLIENT_EMAIL=...
-FIREBASE_PRIVATE_KEY=...
+## ✦ Queue Infrastructure
+
+Background workloads are distributed across dedicated queues to maintain low latency:
+
+* **BullMQ Orchestration**: Processes general ingestion, local video processing, and vector indexing tasks concurrently.
+* **Redis Connection Singleton**: Reuses a single centralized `redisConnection` instance across all queues and workers to prevent connection leaks.
+* **Worker Isolation**: General ingestion tasks (`concurrency: 2`) and local video processing tasks (`concurrency: 3`) run as decoupled services, preventing CPU starvation.
+* **Robust Fail-Safe Recovery**: Configures a 5-minute task lock with active background extenders to prevent long-running transcription tasks from timing out.
+* **Automatic Rollbacks**: Catches task failures, sets the workspace state to `ready_without_vectors`, deletes intermediate Supabase files, and purges incomplete vector insertions.
+
+---
+
+## ✦ Retrieval Architecture
+
+RAG context retrieval uses a hybrid search algorithm to ground AI answers:
+
+```mermaid
+flowchart TD
+    Query["Search Query"] --> Embed["NIM Query Embedding"]
+    Embed --> Qdrant["Qdrant Cosine Search"]
+    Qdrant --> Rank["RRF Fusion (Qdrant + Local BM25)"]
+    Rank --> Ground["Cognitive Context Grounding"]
+    Ground --> Response["SSE Token Stream"]
 ```
 
-Optional:
+* **Hybrid Search**: Combines Qdrant vector search with a local BM25 keyword matching fallback system.
+* **Reciprocal Rank Fusion**: Merges semantic and lexical scores, weighting context chunks dynamically.
+* **Context Grounding**: Limits results from a single source to a maximum of 60% of the total context block, ensuring diverse reference materials.
 
-```bash
-STORAGE_PROVIDER=supabase
-SUPABASE_URL=https://your-project-id.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-SUPABASE_STORAGE_BUCKET=workspace-assets
-SUPABASE_SIGNED_URL_TTL_SECONDS=3600
-MAX_VIDEO_UPLOAD_MB=100
-FIREBASE_STORAGE_BUCKET=...
-NVIDIA_MODEL=nvidia/nemotron-3-nano-30b-a3b
-CORS_ORIGINS=http://localhost:5173,https://your-frontend.example
-FRONTEND_URL=http://localhost:5173
-ALLOW_VERCEL_PREVIEWS=true
+---
+
+## ✦ Production Engineering
+
+* **Request Abort Signal Mapping**: Maps client request cancellations (`req.signal`) downstream to terminate active LLM model streams, preventing unnecessary token costs.
+* **Isolated Video Demuxing**: Runs FFmpeg operations within isolated sandboxed directories. Uses double-layer `try...finally` blocks to ensure temporary directories are cleaned up on error.
+* **Scalable Service Splits**: Supports running in three modes depending on config settings: API-only mode (`RUN_WORKERS=false`), Worker-only mode (`RUN_API=false`), and Monolith mode (both active).
+* **Redis and Qdrant Hardening**: Shuts down immediately at boot time if environment connection strings are missing, preventing silent local fallbacks in production.
+
+---
+
+## ✦ Infrastructure Stack
+
+| Service | Category | Purpose |
+|---|---|---|
+| **NVIDIA NIM API** | Inference Layer | Powering chat generations and generating 1024-dimension embeddings. |
+| **AssemblyAI** | Audio Pipeline | Serverless speech-to-text transcription engine. |
+| **Qdrant Cloud** | Vector Storage | Real-time dense vector storage and hybrid indexer. |
+| **Firestore** | Core Metadata | Document database tracking users, chats, and workspaces. |
+| **Upstash Redis** | Queue State | Serverless task manager backing BullMQ. |
+| **Supabase** | Object Storage | Private storage bucket hosting PDFs and videos. |
+
+---
+
+## ✦ Deployment Topology
+
+```mermaid
+flowchart LR
+    Vercel["Vercel Edge UI"] <--> Railway["Railway API Nodes"]
+    Railway <--> Redis["Upstash Redis Queue"]
+    Railway <--> Qdrant["Qdrant Cloud DB"]
+    Railway <--> Firebase["Firestore DB"]
+    Railway <--> Supabase["Supabase Storage"]
 ```
 
-## Frontend Contract
+---
 
-Use `GET /api/lessons?courseId=...` for the main dashboard grid. It excludes `status: "failed"` records so broken uploads do not pollute the primary learning experience.
+## ✦ Reliability + Security
 
-Use `GET /api/lessons/failed?courseId=...` for a separate failed section. The response includes:
-
-```json
-{
-  "total": 2,
-  "lessons": []
-}
-```
-
-Use `DELETE /api/lessons/failed?courseId=...` for "clear all failed" and `DELETE /api/lessons/:lessonId/failed` for a single failed card delete action.
-
-For uploaded videos, point the native `<video>` source to `/api/lessons/:lessonId/video`. In Supabase mode, that endpoint redirects to a short-lived signed URL. If your frontend prefers to fetch the URL first, call `/api/lessons/:lessonId/playback-url` and use the returned `url`:
-
-```html
-<video controls src="SIGNED_URL_FROM_BACKEND"></video>
-```
-
-For YouTube lessons, use `lesson.youtubeVideoId` in a YouTube iframe with `enablejsapi=1`.
-
-For Google Drive or public meeting recordings, submit:
-
-```json
-{
-  "courseId": "course-id",
-  "title": "Meeting recording",
-  "description": "Optional",
-  "sourceUrl": "https://drive.google.com/file/d/.../view",
-  "language": "auto"
-}
-```
-
-The URL must be public/readable. Google Drive file links are converted to download URLs. Zoom links usually need to be public direct recording/download URLs, not password-protected share pages.
-
-Use `GET /api/lessons/:lessonId/transcript` for captions and `lesson.topicSegments` for the chapter bar. Chat timestamps should call the same `seekTo(seconds)` function used by chapter clicks.
-
-`POST /api/chat/stream` accepts:
-
-```json
-{
-  "lessonId": "lesson-id",
-  "sessionId": "stable-client-session-id",
-  "message": "Explain this part",
-  "currentTime": 120
-}
-```
-
-If `sessionId` is omitted, the server generates one and sends it as both an `X-Chat-Session-Id` response header and an SSE event:
-
-```text
-data: {"type":"session","sessionId":"..."}
-data: {"type":"token","content":"..."}
-data: {"type":"followUps","items":["..."]}
-data: {"type":"done"}
-```
-
-## Production Notes
-
-- Local file fallback is for development only. Configure Supabase Storage for production so uploaded videos survive deployments and container restarts.
-- `multer.memoryStorage()` is intentionally capped at 100 MB by default. Set `MAX_VIDEO_UPLOAD_MB` if you need a different cap later.
-- Transcript chunks are keyword-ranked with BM25-style scoring. For very long lectures, add vector embeddings beside the existing chunk repository.
-- YouTube ingestion returns immediately and processes captions in the background. Videos without captions will move to `failed`; use the failed section so users can see and delete those attempts.
+* **Queue Resilience**: Workers operate on distinct threads. If a heavy FFmpeg process crashes a worker container, the main Express API server continues handling traffic.
+* **Environment Isolation**: Production services require valid HTTPS configurations. All API endpoints check and validate JWT Firebase tokens.
+* **Cleanup Guarantees**: Temporary directories and database drafts are cleaned up immediately following both successful runs and failed tasks.
