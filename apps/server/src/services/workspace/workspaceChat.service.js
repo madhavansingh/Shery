@@ -79,7 +79,7 @@ Context excerpt: "${contextText.substring(0, 800)}..."`;
     }
   }
 
-  async *streamChat({ workspaceId, message, chatId, mode = 'explain', history = [] }) {
+  async *streamChat({ workspaceId, message, chatId, mode = 'explain', history = [], signal }) {
     try {
       logger.info('Workspace stream chat initiated', { workspaceId, chatId, mode });
 
@@ -201,6 +201,7 @@ Context excerpt: "${contextText.substring(0, 800)}..."`;
           temperature: 0.35,
           maxOutputTokens: 2000,
         },
+        signal,
       });
 
       let fullResponse = '';

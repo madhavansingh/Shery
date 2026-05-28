@@ -164,6 +164,7 @@ class IngestionService {
    */
   async runDeepEnrichment(workspaceId, sourceId) {
     const startMs = Date.now();
+    let tempDir = '';
     try {
       const source = await this.sourceRepo.findById(workspaceId, sourceId);
       if (!source) {
@@ -206,7 +207,7 @@ class IngestionService {
 
       let segments = [];
       // Read from checkpoint — fast-path saved tempDir, so we NEVER re-run FFmpeg here
-      let tempDir = checkpointData.tempDir || '';
+      tempDir = checkpointData.tempDir || '';
       // Support both old checkpoint key (segmentFiles) and new key (allSegmentFiles)
       let files = checkpointData.allSegmentFiles || checkpointData.segmentFiles || [];
 
@@ -480,6 +481,19 @@ class IngestionService {
     } catch (error) {
       logger.error('Deep enrichment failed', { workspaceId, sourceId, error: error.message });
       await this.stateMachine.transitionTo(workspaceId, sourceId, 'failed', 0, `Deep enrichment failed: ${error.message}`);
+      
+      // Clean up transient local segment directory if failed
+      if (tempDir) {
+        const fs = await import('fs');
+        try {
+          if (fs.existsSync(tempDir)) {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+            logger.info('Cleaned up temp segment directory after failure', { tempDir });
+          }
+        } catch (rmErr) {
+          logger.warn('Failed to clean up temp segment directory after failure', { tempDir, error: rmErr.message });
+        }
+      }
     }
   }
 

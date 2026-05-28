@@ -50,6 +50,8 @@ class GeminiCompatibleAiClient {
       temperature: opts.generationConfig?.temperature ?? 0.35,
       max_tokens: opts.generationConfig?.maxOutputTokens ?? 1500,
       stream: true,
+    }, {
+      signal: opts.signal,
     });
 
     return {

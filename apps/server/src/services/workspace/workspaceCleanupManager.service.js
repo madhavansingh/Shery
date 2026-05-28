@@ -68,6 +68,22 @@ class WorkspaceCleanupManager {
       });
     }
 
+    // 2.5. Resiliently clean up transient local temp video segment directories (ws-vid-seg-*, etc.)
+    try {
+      const sourceDoc = await this.sourceRepo.findById(workspaceId, sourceId);
+      const checkpointData = sourceDoc?.ingestionState?.checkpointData || {};
+      const tempDir = checkpointData.tempDir || '';
+      if (tempDir && fs.existsSync(tempDir)) {
+        logger.info(`Purging transient local segment directory during rollback: ${tempDir}`, { sourceId });
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    } catch (tempErr) {
+      logger.warn(`Failed to clean up transient local segment directory during rollback (non-blocking)`, {
+        sourceId,
+        error: tempErr.message,
+      });
+    }
+
     // 3. Mark the source state as failed if not already, appending details
     try {
       const sourceDoc = await this.sourceRepo.findById(workspaceId, sourceId);

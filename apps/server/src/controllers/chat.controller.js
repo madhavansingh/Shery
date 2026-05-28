@@ -39,6 +39,7 @@ class ChatController {
         message,
         currentTime,
         history,
+        signal: req.signal,
       })) {
         if (clientAborted || res.writableEnded) break;
 

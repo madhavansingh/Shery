@@ -118,7 +118,7 @@ class ChatService {
     return lesson;
   }
 
-  async *streamChat({ lessonId, message, currentTime = 0, history = [] }) {
+  async *streamChat({ lessonId, message, currentTime = 0, history = [], signal }) {
     const lesson = await this.ensureLessonReady(lessonId);
 
     if (lesson.status !== 'ready') {
@@ -162,6 +162,7 @@ class ChatService {
         { role: 'user', parts: [{ text: userMessage }] },
       ],
       generationConfig: { temperature: 0.35, maxOutputTokens: 1500 },
+      signal,
     });
 
     let fullResponse = '';

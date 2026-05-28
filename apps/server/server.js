@@ -3,10 +3,17 @@ import config from './src/config/env.js';
 import { initializeFirebase } from './src/config/firebase.js';
 import logger from './src/loggers/logger.js';
 
-// Register background queue workers
-import './src/worker/ingestion.worker.js';
-import './src/worker/workspace.worker.js';
-import './src/worker/workspaceUpload.worker.js';
+// Dynamically register background queue workers based on configuration
+const runWorkers = process.env.RUN_WORKERS !== 'false';
+const runApi = process.env.RUN_API !== 'false';
+
+if (runWorkers) {
+  logger.info('Initializing background queue workers...');
+  await import('./src/worker/ingestion.worker.js');
+  await import('./src/worker/workspace.worker.js');
+  await import('./src/worker/workspaceUpload.worker.js');
+  logger.info('Background queue workers initialized successfully.');
+}
 
 process.on('uncaughtException', (err) => {
   logger.error(`uncaughtException: ${err.message}`, { stack: err.stack });
@@ -20,17 +27,22 @@ process.on('unhandledRejection', (reason) => {
 
 initializeFirebase();
 
-const server = app.listen(config.port, () => {
-  logger.info(`SheryAI Backend running on port ${config.port}`);
-  logger.info(`Environment: ${config.nodeEnv}`);
-  logger.info(`Health check: http://localhost:${config.port}/api/health`);
-});
+if (runApi) {
+  const server = app.listen(config.port, () => {
+    logger.info(`SheryAI Backend running on port ${config.port}`);
+    logger.info(`Environment: ${config.nodeEnv}`);
+    logger.info(`Health check: http://localhost:${config.port}/api/health`);
+  });
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    logger.error(`Port ${config.port} is already in use`);
-  } else {
-    logger.error(`Server error: ${err.message}`);
-  }
-  process.exit(1);
-});
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      logger.error(`Port ${config.port} is already in use`);
+    } else {
+      logger.error(`Server error: ${err.message}`);
+    }
+    process.exit(1);
+  });
+} else {
+  logger.info('SheryAI running in Worker-Only mode (Express server disabled).');
+}
+

@@ -491,6 +491,7 @@ router.post('/:wid/chat', workspaceChatLimiter, requireWorkspaceOwnership, async
         chatId: activeChatId,
         mode: mode || 'explain',
         history,
+        signal: req.signal,
       })) {
         if (clientAborted) break;
         res.write(`data: ${JSON.stringify(event)}\n\n`);
