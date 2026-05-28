@@ -3,6 +3,9 @@ import { redisConnection } from '../infrastructure/redis.js';
 import workspaceContainer from '../container/workspaceContainer.js';
 import logger from '../loggers/logger.js';
 
+console.log("REDIS INIT SOURCE: workspaceUpload.worker.js");
+console.log("Runtime REDIS_URL:", process.env.REDIS_URL);
+
 export const workspaceUploadWorker = new Worker(
   'workspace-upload-queue',
   async (job) => {

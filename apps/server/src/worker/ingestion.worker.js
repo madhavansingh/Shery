@@ -3,6 +3,9 @@ import { redisConnection } from '../infrastructure/redis.js';
 import container from '../container.js';
 import logger from '../core/logger.js';
 
+console.log("REDIS INIT SOURCE: ingestion.worker.js");
+console.log("Runtime REDIS_URL:", process.env.REDIS_URL);
+
 export const ingestionWorker = new Worker(
   'ingestion-queue',
   async (job) => {
