@@ -1,7 +1,7 @@
 import { getDb } from '../config/firebase.js';
 import { geminiFlash } from '../config/gemini.js';
 import { getNvidiaClient } from '../config/nvidia.js';
-import { getQdrantClient } from '../config/qdrant.js';
+import { getQdrantClient } from '../infrastructure/qdrant.js';
 import config from '../config/env.js';
 import { redisConnection } from '../infrastructure/redis.js';
 import HotWorkspaceCacheService from '../services/workspace/hotWorkspaceCache.service.js';

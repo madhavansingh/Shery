@@ -1,6 +1,6 @@
 import logger from '../../loggers/logger.js';
 import AppError from '../../utils/AppError.js';
-import { WORKSPACE_COLLECTION } from '../../config/qdrant.js';
+import { WORKSPACE_COLLECTION } from '../../infrastructure/qdrant.js';
 
 class VectorSearchService {
   constructor({ embeddingService, qdrantClient, aiClient, hotWorkspaceCacheService } = {}) {

@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import logger from '../../loggers/logger.js';
 import AppError from '../../utils/AppError.js';
-import { WORKSPACE_COLLECTION, ensureQdrantCollection } from '../../config/qdrant.js';
+import { WORKSPACE_COLLECTION, ensureQdrantCollection } from '../../infrastructure/qdrant.js';
 
 const UPSERT_BATCH_SIZE = 40; // Progressive upsert size
 const RATE_LIMIT_DELAY_MS = 100;

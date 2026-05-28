@@ -1,5 +1,5 @@
 import logger from '../../loggers/logger.js';
-import { qdrantHealthCheck, ensureQdrantCollection } from '../../config/qdrant.js';
+import { qdrantHealthCheck, ensureQdrantCollection } from '../../infrastructure/qdrant.js';
 
 class VectorInfrastructureManager {
   constructor({ dbProvider, embeddingService, workspaceSourceRepository }) {
