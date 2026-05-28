@@ -1,0 +1,204 @@
+@import "tailwindcss/theme";
+@import "tailwindcss/preflight";
+@import "tailwindcss/utilities";
+@config "../tailwind.config.js";
+
+/* Premium Calm Dark Workspace Theme Design Tokens */
+.dark-workspace {
+  --workspace-bg: #030305;
+  --workspace-sidebar: #06070a;
+  --workspace-panel: rgba(9, 10, 15, 0.70);
+  --workspace-card: rgba(16, 17, 24, 0.45);
+  --workspace-card-hover: rgba(24, 25, 35, 0.60);
+  --workspace-border: rgba(255, 255, 255, 0.04);
+  --workspace-border-hover: rgba(255, 255, 255, 0.08);
+  --workspace-border-active: rgba(99, 102, 241, 0.25);
+  --workspace-text-primary: #f8fafc;
+  --workspace-text-secondary: #94a3b8;
+  --workspace-text-muted: #475569;
+  
+  --workspace-accent: #6366f1; /* Indigo */
+  --workspace-accent-hover: #4f46e5;
+  --workspace-accent-soft: rgba(99, 102, 241, 0.06);
+  --workspace-accent-glow: rgba(99, 102, 241, 0.15);
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-display: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  --glass-blur: blur(24px);
+  --shadow-premium: 0 30px 60px -15px rgba(0, 0, 0, 0.95), 0 0 40px -10px rgba(99, 102, 241, 0.05);
+  --shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(255, 255, 255, 0.01);
+  --shadow-card-hover: 0 20px 40px -10px rgba(0, 0, 0, 0.75), 0 0 20px rgba(99, 102, 241, 0.1), 0 1px 3px rgba(255, 255, 255, 0.03);
+
+  color-scheme: dark;
+  background-color: var(--workspace-bg);
+  color: var(--workspace-text-primary);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Headings styled with display font */
+.dark-workspace h1,
+.dark-workspace h2,
+.dark-workspace h3,
+.dark-workspace h4,
+.dark-workspace .workspace-heading {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.dark-workspace input,
+.dark-workspace textarea {
+  color: var(--workspace-text-primary);
+  background-color: rgba(255, 255, 255, 0.015);
+  border-color: var(--workspace-border);
+  font-family: var(--font-sans);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark-workspace input:focus,
+.dark-workspace textarea:focus {
+  border-color: rgba(99, 102, 241, 0.4);
+  background-color: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.1);
+  outline: none;
+}
+
+.dark-workspace ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark-workspace ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.dark-workspace ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Glassmorphism structures */
+.workspace-glass {
+  background-color: var(--workspace-panel);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--workspace-border);
+  box-shadow: var(--shadow-premium);
+}
+
+.workspace-glass-card {
+  background-color: var(--workspace-card);
+  border: 1px solid var(--workspace-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-card);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.workspace-glass-card:hover {
+  background-color: var(--workspace-card-hover);
+  border-color: var(--workspace-border-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+/* Elegant radial gradients */
+.bg-radial-gradient {
+  background: radial-gradient(circle at 50% 50%, var(--workspace-accent-soft), transparent 60%);
+}
+
+/* Animated Siri-like AI Orb */
+@keyframes orb-morph {
+  0% {
+    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+    transform: scale(0.95) rotate(0deg);
+  }
+  33% {
+    border-radius: 70% 30% 52% 48% / 60% 40% 60% 40%;
+    transform: scale(1.03) rotate(120deg);
+  }
+  66% {
+    border-radius: 50% 50% 30% 70% / 40% 60% 40% 60%;
+    transform: scale(0.97) rotate(240deg);
+  }
+  100% {
+    border-radius: 42% 58% 70% 30% / 45% 45% 55% 55%;
+    transform: scale(0.95) rotate(360deg);
+  }
+}
+
+@keyframes orb-glow-pulse {
+  0% {
+    filter: blur(40px) brightness(0.8);
+    opacity: 0.6;
+  }
+  50% {
+    filter: blur(60px) brightness(1.2);
+    opacity: 0.95;
+  }
+  100% {
+    filter: blur(40px) brightness(0.8);
+    opacity: 0.6;
+  }
+}
+
+.ai-orb-container {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-orb-glow {
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.4) 0%, rgba(139, 92, 246, 0.3) 40%, rgba(236, 72, 153, 0.1) 70%, transparent 100%);
+  animation: orb-glow-pulse 6s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.ai-orb-body {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.75) 0%, rgba(139, 92, 246, 0.65) 50%, rgba(236, 72, 153, 0.5) 100%);
+  backdrop-filter: blur(4px);
+  animation: orb-morph 8s ease-in-out infinite;
+  box-shadow: inset 0 0 20px rgba(255, 255, 255, 0.2), 0 10px 30px rgba(99, 102, 241, 0.2);
+}
+
+/* Soft shimmer animation for AI thinking states */
+@keyframes text-shimmer {
+  0% { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+
+.ai-text-shimmer {
+  background: linear-gradient(90deg, #64748b 30%, #f8fafc 50%, #64748b 70%);
+  background-size: 200% auto;
+  color: transparent;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: text-shimmer 2.5s linear infinite;
+}
+
+/* Custom premium transitions */
+.transition-premium {
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Shimmer overlay for loading assets */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton-premium {
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.01) 25%, rgba(255, 255, 255, 0.05) 37%, rgba(255, 255, 255, 0.01) 63%);
+  background-size: 400% 100%;
+  animation: skeleton-shimmer 1.4s ease infinite;
+}

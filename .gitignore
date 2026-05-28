@@ -1,0 +1,64 @@
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# ── Secrets & Environment ─────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+*.pem
+serviceAccountKey.json
+google-credentials.json
+firebase-service-account.json
+keys/
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build & Distribution ──────────────────────────────────────────────────────
+dist/
+build/
+out/
+.next/
+.nuxt/
+.vercel/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+firebase-debug.log
+firestore-debug.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Uploads (large binaries — use GCS/Supabase in production) ────────────────
+apps/uploads/
+apps/server/uploads/
+
+# ── Firebase emulator ────────────────────────────────────────────────────────
+.firebase/
+firebase-export-*/
+
+# ── Turborepo cache ───────────────────────────────────────────────────────────
+.turbo/
+
+# ── Editor ────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+coverage/
+.nyc_output/
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+*.tsbuildinfo
+.eslintcache

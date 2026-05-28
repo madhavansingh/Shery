@@ -1,0 +1,280 @@
+import logger from '../../loggers/logger.js';
+import { buildSystemPrompt, buildGroundingPrompt, buildFollowUpPrompt } from '../../lib/prompt/workspace-chat.js';
+
+class WorkspaceChatService {
+  constructor({
+    vectorSearchService,
+    contextManagerService,
+    workspaceMemoryService,
+    workspaceChatRepository,
+    geminiFlash,
+    retrievalEvaluationService,
+    workspaceSourceRepository,
+  }) {
+    this.vectorSearch = vectorSearchService;
+    this.contextManager = contextManagerService;
+    this.workspaceMemory = workspaceMemoryService;
+    this.chatRepo = workspaceChatRepository;
+    this.geminiFlash = geminiFlash;
+    this.retrievalEvaluation = retrievalEvaluationService;
+    this.sourceRepo = workspaceSourceRepository;
+  }
+
+  formatHistory(messages = []) {
+    // Only take the last 6 messages to prevent overflow and focus context
+    return messages.slice(-6).map((msg) => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }],
+    }));
+  }
+
+  /**
+   * Generate contextual follow-up questions after a response.
+   * Falls back gracefully to empty array if generation fails.
+   */
+  async generateFollowUpQuestions(query, response, mode) {
+    if (!this.geminiFlash) return [];
+    try {
+      const prompt = buildFollowUpPrompt(query, response, mode);
+      const result = await this.geminiFlash.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.5, maxOutputTokens: 200 },
+      });
+      const text = result.response?.text?.()?.trim() || '';
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(q => typeof q === 'string' && q.length > 5).slice(0, 4);
+        }
+      }
+    } catch (err) {
+      logger.warn('Follow-up question generation failed (non-fatal)', { error: err.message });
+    }
+    return [];
+  }
+
+  /**
+   * Generate an internal answer plan to guide the AI response structure.
+   * This ensures the model TEACHES rather than dumps transcript text.
+   */
+  async buildAnswerPlan(query, contextText, mode) {
+    if (!this.geminiFlash) return null;
+    try {
+      const prompt = `You are a pedagogical planner. Given this user question and some source material, 
+create a brief teaching plan (3-5 bullets) that outlines how to explain this topic clearly and progressively.
+Be concise. Return ONLY a plain text bullet list.
+
+Question: "${query}"
+Mode: ${mode}
+Context excerpt: "${contextText.substring(0, 800)}..."`;
+
+      const result = await this.geminiFlash.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.2, maxOutputTokens: 150 },
+      });
+      return result.response?.text?.()?.trim() || null;
+    } catch {
+      return null;
+    }
+  }
+
+  async *streamChat({ workspaceId, message, chatId, mode = 'explain', history = [] }) {
+    try {
+      logger.info('Workspace stream chat initiated', { workspaceId, chatId, mode });
+
+      let matchedChunks = [];
+      let isFallbackUsed = false;
+
+      try {
+        // Step 1: Hybrid retrieval across workspace chunks
+        matchedChunks = await this.vectorSearch.hybridSearch(workspaceId, message, { topK: 15 });
+      } catch (err) {
+        logger.warn('Hybrid search failed or timed out. Falling back to local keyword matching.', {
+          workspaceId,
+          error: err.message,
+        });
+      }
+
+      // If hybrid search returned nothing, trigger BM25 text fallback
+      if (!matchedChunks || matchedChunks.length === 0) {
+        logger.info('Performing BM25 text fallback for workspace chat', { workspaceId });
+        isFallbackUsed = true;
+
+        const sources = await this.sourceRepo.findByWorkspace(workspaceId);
+        const activeStatuses = [
+          'ready', 'completed', 'partially_ready', 'transcript_ready',
+          'vector_ready', 'graph_ready', 'ready_without_vectors',
+          'indexing_pending', 'indexing_retrying', 'fully_indexed',
+        ];
+        const activeSources = sources.filter(s => activeStatuses.includes(s.status));
+
+        const textChunks = [];
+        for (const src of activeSources) {
+          if (!src.transcript) continue;
+          const paragraphs = src.transcript.split(/\n+/).map(p => p.trim()).filter(p => p.length > 20);
+          let chunkIndex = 0;
+          for (const p of paragraphs) {
+            const maxLen = 800;
+            let start = 0;
+            while (start < p.length) {
+              const text = p.substring(start, start + maxLen);
+              textChunks.push({
+                text,
+                sourceId: src.id,
+                sourceTitle: src.title,
+                sourceType: src.type,
+                chunkIndex: chunkIndex++,
+                startTime: null,
+                endTime: null,
+                pageNumber: null,
+                sectionTitle: 'Transcript Segment',
+                relevance: 1.0,
+                semanticScore: 1.0,
+              });
+              start += maxLen - 150;
+            }
+          }
+        }
+
+        const queryTerms = message.toLowerCase().split(/\s+/).filter(t => t.length > 2);
+        matchedChunks = textChunks
+          .map(chunk => {
+            let score = 0;
+            const textLower = chunk.text.toLowerCase();
+            for (const term of queryTerms) {
+              if (textLower.includes(term)) score += textLower.split(term).length - 1;
+            }
+            return { ...chunk, score };
+          })
+          .filter(c => c.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 10);
+      }
+
+      if (!matchedChunks || matchedChunks.length === 0) {
+        yield {
+          type: 'error',
+          message:
+            "I couldn't find relevant information in your uploaded sources. Try uploading more materials on this topic.",
+        };
+        return;
+      }
+
+      // Step 2: Context window assembly
+      const { contextText, sourcesUsed } = await this.contextManager.assembleContext(
+        matchedChunks,
+        message,
+        { maxTokens: 3000, diversityWeight: 0.5 }
+      );
+
+      // Step 3: Workspace memory context
+      const memoryContext = await this.workspaceMemory.getAdaptivePromptContext(workspaceId);
+
+      // Step 4: Answer planning (non-blocking, parallel with context assembly)
+      let answerPlan = null;
+      try {
+        answerPlan = await this.buildAnswerPlan(message, contextText, mode);
+      } catch { /* non-fatal */ }
+
+      // Step 5: System and Grounding prompts
+      const systemInstruction = buildSystemPrompt(mode, memoryContext);
+      const groundingUserPrompt = buildGroundingPrompt(contextText, sourcesUsed);
+
+      const planSection = answerPlan
+        ? `\n\nTEACHING PLAN — Follow this pedagogical outline for your response:\n${answerPlan}\n`
+        : '';
+
+      const userMessageText = `${groundingUserPrompt}${planSection}\n\nUSER QUESTION:\n${message}`;
+
+      // Step 6: Yield sources immediately before tokens stream
+      yield { type: 'sources', items: sourcesUsed };
+
+      // Step 7: Execute Gemini streaming
+      const streamResult = await this.geminiFlash.generateContentStream({
+        systemInstruction,
+        contents: [
+          ...this.formatHistory(history),
+          { role: 'user', parts: [{ text: userMessageText }] },
+        ],
+        generationConfig: {
+          temperature: 0.35,
+          maxOutputTokens: 2000,
+        },
+      });
+
+      let fullResponse = '';
+      for await (const chunk of streamResult.stream) {
+        const text = chunk.text();
+        if (!text) continue;
+        fullResponse += text;
+        yield { type: 'token', content: text };
+      }
+
+      // Step 8: Generate follow-up questions (async, non-blocking)
+      let followUpQuestions = [];
+      try {
+        followUpQuestions = await this.generateFollowUpQuestions(message, fullResponse, mode);
+        if (followUpQuestions.length > 0) {
+          yield { type: 'followUp', questions: followUpQuestions };
+        }
+      } catch { /* non-fatal */ }
+
+      // Step 9: Record in workspace memory
+      if (!isFallbackUsed) {
+        await this.workspaceMemory.recordInteraction(workspaceId, message, matchedChunks);
+      }
+
+      // Step 10: Calculate Grounded Trust Metrics
+      const trustMetrics = this.retrievalEvaluation.evaluateRetrieval(
+        message, fullResponse, matchedChunks
+      );
+
+      // Step 11: Save messages in Firestore
+      const userMessage = {
+        role: 'user',
+        content: message,
+        createdAt: new Date().toISOString(),
+      };
+      const assistantMessage = {
+        role: 'assistant',
+        content: fullResponse,
+        sources: sourcesUsed,
+        trustMetrics,
+        followUpQuestions,
+        mode,
+        createdAt: new Date().toISOString(),
+      };
+
+      await this.chatRepo.appendMessage(workspaceId, chatId, userMessage);
+      await this.chatRepo.appendMessage(workspaceId, chatId, assistantMessage);
+
+      yield { type: 'done', fullResponse, sourcesUsed, trustMetrics, followUpQuestions };
+    } catch (error) {
+      logger.error('Workspace streaming chat failed', { error: error.message, workspaceId, chatId });
+      yield {
+        type: 'error',
+        message: 'An AI processing error occurred. Please verify your query or try again later.',
+      };
+    }
+  }
+
+  async getChatHistory(workspaceId, chatId) {
+    const chat = await this.chatRepo.findById(workspaceId, chatId);
+    return chat?.messages || [];
+  }
+
+  async listChats(workspaceId) {
+    return this.chatRepo.findByWorkspace(workspaceId);
+  }
+
+  async createChat(workspaceId, { mode = 'explain', title = 'New Conversation' }) {
+    return this.chatRepo.create(workspaceId, { mode, title });
+  }
+
+  async deleteChat(workspaceId, chatId) {
+    return this.chatRepo.delete(workspaceId, chatId);
+  }
+}
+
+export default WorkspaceChatService;
