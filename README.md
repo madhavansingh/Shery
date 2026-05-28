@@ -2,7 +2,7 @@
 
 # SheryAI
 
-### Next-Generation AI-Native Knowledge Operating System for Video Lectures
+### Distributed, Asynchronous Knowledge Ingestion and Retrieval Engine for Video Lectures
 
 [![Production Build](https://github.com/madhavansingh/Shery/actions/workflows/build.yml/badge.svg)](https://github.com/madhavansingh/Shery/actions)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
@@ -12,100 +12,25 @@
 [![BullMQ Engine](https://img.shields.io/badge/Queue-BullMQ_Engine-purple.svg)](https://docs.bullmq.io/)
 [![Supabase Storage](https://img.shields.io/badge/Storage-Supabase_Storage-green.svg)](https://supabase.com/)
 
-**Transform any lecture, raw video, or academic document into a living, fully interactive knowledge workspace with semantic search, cognitive tutoring, and real-time concept synthesis.**
+**An enterprise-grade, async-first ingestion and retrieval infrastructure stack designed to process, segment, embed, index, and query unstructured media at scale with absolute grounding and zero hallucinations.**
 
-[Architecture](#✦-complete-system-architecture) • [Ingestion Pipeline](#✦-ai-ingestion-pipeline) • [Streaming Engine](#✦-streaming-ai-response-pipeline) • [Vector Retrieval](#✦-vector-retrieval-architecture) • [Deployment](#✦-production-infrastructure)
+[Architecture](#system-architecture) • [AI Processing](#ai-processing-pipeline) • [Retrieval Engine](#semantic-retrieval-engine) • [Orchestration](#backend-orchestration) • [Topology](#deployment-topology) • [Lifecycle](#knowledge-processing-lifecycle)
 
 </div>
 
 ---
 
-## ✦ Built for the Future of Intelligent Learning
+## Introduction
 
-Passive learning is fundamentally broken. Students spend hundreds of hours watching video lectures and reading massive documents, yet the knowledge inside remains static, un-searchable, and disconnected. 
+Passive learning is fundamentally broken. Video lectures and academic documents contain rich, multi-dimensional information, yet the knowledge inside remains static, un-searchable, and disconnected.
 
-SheryAI re-imagines lectures as dynamic knowledge graphs. By integrating deep semantic vector indexing with real-time audio transcription and a production-grade RAG pipeline, it allows learners to converse with their course materials, query topics through hybrid semantic searches, generate study guides, and visual-map cognitive milestones.
+SheryAI solves this by re-imagining lectures as dynamic, searchable knowledge graphs. By integrating deep semantic vector indexing with real-time audio transcription and a production-grade RAG pipeline, it allows users to converse with course materials, query topics through hybrid semantic searches, generate study guides, and visual-map cognitive milestones.
 
-> [!IMPORTANT]
-> **SheryAI is not a simple chatbot wrapper.** It is an enterprise-grade ingestion and retrieval infrastructure stack designed to process, segment, embed, index, and query unstructured media at scale with absolute grounding and zero hallucinations.
-
----
-
-## ✦ Product Experience
-
-SheryAI shifts the paradigm of digital learning from passive consumption to active dialogue:
-
-* **Ingest and Transcribe**: Upload lecture recordings, PDFs, YouTube URLs, or audio clips.
-* **Intelligent Synthesis**: The platform automatically partitions resources, extracts semantic tags, translates audio to text, and indexes content vectors.
-* **Grounded Chat**: Converse with a dedicated AI Tutor whose responses are mathematically locked to your source documents to eliminate hallucinations.
-* **Interactive Timestamps**: Click inline chat citations to instantly jump to the exact second in the video where a topic was discussed.
-* **Assessment Labs**: Instantly synthesize flashcards, quiz pools, chronological timelines, and knowledge gap analyses.
+SheryAI is not a simple chatbot wrapper. It is a decoupled backend processing infrastructure that coordinates CPU-heavy workflows outside the API request lifecycle, serving structured answers mathematically locked to source documents.
 
 ---
 
-## ✦ Platform Preview
-
-## 1. Landing Page
-
-Modern AI-native onboarding interface with cinematic gradients, adaptive layout system, and semantic navigation architecture.
-
-<div align="center">
-  <img src="./assets/readme/landing-page.png" alt="SheryAI Landing Page" width="100%" />
-</div>
-
----
-
-## 2. AI Workspace
-
-Unified academic intelligence workspace integrating lecture ingestion, document synchronization, semantic retrieval, and contextual memory systems.
-
-<div align="center">
-  <img src="./assets/readme/workspace-dashboard.png" alt="SheryAI Workspace" width="100%" />
-</div>
-
----
-
-## 3. Lecture Intelligence
-
-Real-time audio extraction, transactional state tracking, and state machine virtualization pipeline converting media files into transcription segments.
-
-<div align="center">
-  <img src="./assets/readme/lecture-intelligence.png" alt="SheryAI Lecture Intelligence" width="100%" />
-</div>
-
----
-
-## 4. Semantic Tutor
-
-Context-locked learning dialog interface supporting temporal references, interactive video synchronization, and grounded cognitive chat.
-
-<div align="center">
-  <img src="./assets/readme/semantic-tutor.png" alt="SheryAI Semantic Tutor" width="100%" />
-</div>
-
----
-
-## 5. Knowledge Dashboard
-
-Unified academic diagnostic suite presenting automated flashcards, quiz generation, cognitive gap analysis, and interactive lesson timelines.
-
-<div align="center">
-  <img src="./assets/readme/knowledge-dashboard.png" alt="SheryAI Knowledge Dashboard" width="100%" />
-</div>
-
----
-
-## 6. AI Search Experience
-
-High-performance search interface utilizing Reciprocal Rank Fusion (RRF) to merge semantic vector queries with lexical BM25 database scoring.
-
-<div align="center">
-  <img src="./assets/readme/ai-search.png" alt="SheryAI AI Search Experience" width="100%" />
-</div>
-
----
-
-## ✦ Complete System Architecture
+## System Architecture
 
 SheryAI is built on a highly decoupled, async-first architecture. It segregates API routing, heavy background compute workers, vector storage, and state tracking to prevent thread blocking and memory inflation.
 
@@ -169,7 +94,7 @@ flowchart TB
 
 ---
 
-## ✦ AI Ingestion Pipeline
+## AI Processing Pipeline
 
 The platform utilizes a strict 7-stage transactional state machine. Every step is logged as a state checkpoint in Firestore and piped directly to the user interface in real time.
 
@@ -217,35 +142,55 @@ stateDiagram-v2
     READY --> [*]
 ```
 
-<details>
-<summary><b>Detailed Pipeline Stage Explanations</b></summary>
+### Ingestion Stages
 
-### 1. Verification (VALIDATING)
-* **Envelope Checks**: Validates files against strict parameters (e.g. maximum PDF size limits, audio track existence, and mime verification).
-* **Character Density Diagnostics**: Scans PDF text density using class-based `PDFParse` systems to flag scanned page vectors that require image extraction.
-
-### 2. Audio Extraction & Transcription (TRANSCRIBING)
-* **FFmpeg Demuxing**: Video uploads are processed using sandboxed `ffmpeg` execution. The system isolates the raw audio channel and exports it into a compressed Mono-channel MP3 stream.
-* **Speech to Text**: Streams audio segments to AssemblyAI endpoints. Implements continuous polling loops with custom fallback parameters.
-
-### 3. Overlap Chunking (CHUNKING)
-* **Token Boundaries**: Splits raw transcript strings into semantic text blocks.
-* **Overlap Window**: Employs a token limit config of `384` with a safety overlap window of `48` tokens, ensuring context is preserved across split boundaries.
-
-### 4. Multi-Dimensional Embedding (EMBEDDING)
-* **NVIDIA NIM Generation**: Streams text blocks in batches to the `nv-embedqa-mistral-7b-v2` embedding engine.
-* **Dense Vectors**: Generates a standard float array representing 1024-dimension semantic coordinates.
-
-### 5. Vector Indexing (INDEXING)
-* **Qdrant Upsert**: Performs high-throughput batch inserts of vectors into Qdrant Cloud.
-* **Payload Indexing**: Idempotently establishes payload index definitions (`workspaceId` and `sourceId`) inside Qdrant collections to ensure sub-millisecond search latencies under concurrent workspace queries.
-</details>
+1. **Verification (VALIDATING)**: Validates file envelopes (e.g. maximum PDF size limits, audio track existence, and mime verification). Executing class-based PDF text density checks to flag scanned pages that require image extraction.
+2. **Audio Extraction & Transcription (TRANSCRIBING)**: Video uploads are processed using sandboxed `ffmpeg` execution. The system isolates the raw audio channel and exports it into a compressed Mono-channel MP3 stream before sending to AssemblyAI endpoints.
+3. **Overlap Chunking (CHUNKING)**: Splits raw transcript strings into semantic text blocks. Employs a token limit config of `384` with a safety overlap window of `48` tokens to preserve contextual continuity.
+4. **Multi-Dimensional Embedding (EMBEDDING)**: Streams text blocks in batches to the `nv-embedqa-mistral-7b-v2` embedding engine to generate 1024-dimension dense vector representations.
+5. **Vector Indexing (INDEXING)**: Performs high-throughput batch inserts of vectors into Qdrant Cloud. Idempotently establishes payload index definitions (`workspaceId` and `sourceId`) inside Qdrant collections to ensure sub-millisecond search latencies.
 
 ---
 
-## ✦ Streaming AI Response Pipeline
+## Semantic Retrieval Engine
 
-To deliver a premium, near-instant user interface, responses are computed and streamed using Server-Sent Events (SSE). We wired cancelable abort signals from the browser directly to the inference layers to prevent orphaned processing costs.
+SheryAI utilizes a hybrid search pipeline that combines dense vector semantic matching with classical lexical keyword lookups to deliver optimal grounded context results.
+
+```mermaid
+flowchart TD
+    Query["User Search / Chat Query"] --> Expansion["NVIDIA NIM Query Expansion"]
+    
+    subgraph VectorSearch ["Level 1: Semantic Vector Path"]
+        NIM_Embed["NVIDIA NIM Embeddings Generator"]
+        Qdrant["Qdrant Cloud Cosine Search"]
+        
+        Expansion --> NIM_Embed --> Qdrant
+    end
+    
+    subgraph LexicalSearch ["Level 2: Lexical Fallback Path"]
+        Tokenize["Text Tokenizer & Stopword Filter"]
+        BM25["BM25 Lexical Scorer"]
+        
+        Expansion --> Tokenize --> BM25
+    end
+
+    Qdrant --> RRF["Reciprocal Rank Fusion (RRF)"]
+    BM25 --> RRF
+    
+    RRF --> DiversityFilter["Source Diversity Filter (Max 60% per source)"]
+    DiversityFilter --> ContextBuilder["Top-K Scored Context Chunks"]
+```
+
+### Retrieval Layer Mechanics
+
+* **Query Expansion**: Utilizes the fast NVIDIA Nemotron model to rewrite raw query inputs into a list of synonymous academic keywords, increasing the surface area for semantic searches.
+* **Reciprocal Rank Fusion (RRF)**: Merges ranked results from semantic cosine searches and lexical keyword matching into a single, high-fidelity score. RRF score calculations are computed with a constant factor ($k=60$).
+* **Source Diversity Capping**: Limits the number of results from any single file to a maximum of `60%` of the total top-K return block. This ensures that the context provided to the model is diverse, rather than being dominated by a single source.
+* **Conversational Memory**: Chat sessions manage conversational history via Firebase Firestore array bindings, capped at a maximum of `40` messages to optimize memory footprint and respect token window boundaries during upstream completions.
+
+### Streaming Request Lifecycle
+
+To deliver a premium, near-instant user interface, responses are computed and streamed using Server-Sent Events (SSE). Cancelable abort signals are wired from the browser directly to the inference layers to prevent orphaned processing costs.
 
 ```mermaid
 sequenceDiagram
@@ -285,7 +230,7 @@ sequenceDiagram
 
 ---
 
-## ✦ Queue Orchestration System
+## Backend Orchestration
 
 SheryAI handles CPU-intensive task ingestion asynchronously using a Redis-backed queue system. This isolates heavy operations from request-handling API processes.
 
@@ -322,54 +267,12 @@ flowchart LR
 ```
 
 ### Queue Resilience Architecture
+
 * **Isolated Processing**: Background workers run as distinct, decoupled nodes. If a heavy FFmpeg encoding task crashes a worker container, the main Express API server continues handling traffic without interruption.
 * **Concurrency Capping**: Configures strict limits on active concurrent processes (`concurrency: 2` for general ingestion, `concurrency: 3` for uploads) to prevent background CPU exhaustion on host systems.
 * **Redis Connection Singleton**: All queues and workers reuse the same centralized, validated connection singleton exported from `redis.js`, ensuring we do not exhaust Redis connection limits.
-* **Task Lock Extenders**: Spawns lock renewal processes (`lockRenewTime: 60s` on a `5-minute` lock duration) to prevent long-running transcription jobs from being misclassified as stalled and picked up twice.
-
----
-
-## ✦ Vector Retrieval Architecture
-
-SheryAI utilizes a hybrid search pipeline that combines dense vector semantic matching with classical lexical keyword lookups to deliver optimal grounded context results.
-
-```mermaid
-flowchart TD
-    Query["User Search / Chat Query"] --> Expansion["NVIDIA NIM Query Expansion"]
-    
-    subgraph VectorSearch ["Level 1: Semantic Vector Path"]
-        NIM_Embed["NVIDIA NIM Embeddings Generator"]
-        Qdrant["Qdrant Cloud Cosine Search"]
-        
-        Expansion --> NIM_Embed --> Qdrant
-    end
-    
-    subgraph LexicalSearch ["Level 2: Lexical Fallback Path"]
-        Tokenize["Text Tokenizer & Stopword Filter"]
-        BM25["BM25 Lexical Scorer"]
-        
-        Expansion --> Tokenize --> BM25
-    end
-
-    Qdrant --> RRF["Reciprocal Rank Fusion (RRF)"]
-    BM25 --> RRF
-    
-    RRF --> DiversityFilter["Source Diversity Filter (Max 60% per source)"]
-    DiversityFilter --> ContextBuilder["Top-K Scored Context Chunks"]
-```
-
-### Retrieval Layer Mechanics
-* **Query Expansion**: Utilizes the fast NVIDIA Nemotron model to rewrite raw query inputs into a list of synonymous academic keywords, increasing the surface area for semantic searches.
-* **Reciprocal Rank Fusion (RRF)**: Merges ranked results from semantic cosine searches and lexical keyword matching into a single, high-fidelity score:
-  $$RRF\_Score(d) = \sum_{m \in M} \frac{1}{k + r_m(d)}$$
-  where $k=60$ and $r_m(d)$ is the rank of document $d$ in the system path $m$.
-* **Source Diversity Capping**: Limits the number of results from any single file to a maximum of **`60%`** of the total top-K return block. This ensures that the context provided to the model is diverse, rather than being dominated by a single source.
-
----
-
-## ✦ Worker Lifecycle & Cleanup Flow
-
-To guarantee absolute memory safety and prevent storage bloat, background workers follow a strict transactional job lifecycle, executing rollback cleanups immediately on failure.
+* **Task Lock Extenders**: Spawns lock renewal processes (`lockRenewTime: 60s` on a 5-minute lock duration) to prevent long-running transcription jobs from being misclassified as stalled and picked up twice.
+* **Worker Lifecycle & Cleanup**: To guarantee absolute memory safety and prevent storage bloat, background workers follow a strict transactional job lifecycle, executing rollback cleanups immediately on failure.
 
 ```mermaid
 stateDiagram-v2
@@ -399,7 +302,7 @@ stateDiagram-v2
 
 ---
 
-## ✦ Production Infrastructure
+## Deployment Topology
 
 The platform is designed to deploy on cost-effective serverless cloud providers, utilizing free tier limits.
 
@@ -444,6 +347,7 @@ flowchart TD
 ```
 
 ### Production Scaling Strategy
+
 1. **Frontend Isolation**: The React application is deployed to Vercel's global edge network, ensuring fast asset delivery and static page loading.
 2. **Process Segregation**:
    * **`sheryai-api`**: Configured with `RUN_API=true` and `RUN_WORKERS=false`. Exposes REST endpoints to clients.
@@ -452,7 +356,52 @@ flowchart TD
 
 ---
 
-## ✦ Performance Engineering
+## Knowledge Processing Lifecycle
+
+Unstructured lectures and documents are progressively mapped and transformed into queryable, context-grounded learning graphs with semantic memory. The diagram below represents the exact flow of data from ingestion start to complete indexing:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as User Client
+    participant Ingestion as Ingestion Service
+    participant Queue as BullMQ Task Queue
+    participant Worker as Background Worker Node
+    participant Storage as Supabase Storage Bucket
+    participant Parser as Extraction Engine
+    participant Embed as Embedding Service (NIM)
+    participant Qdrant as Qdrant Vector DB
+    participant Firestore as Firestore Metadata DB
+
+    Client->>Ingestion: Upload Lecture Document / Video
+    Ingestion->>Storage: Store Raw Asset in Private Bucket
+    Ingestion->>Firestore: Create Document (status='pending')
+    Ingestion->>Queue: Enqueue Ingestion Job (workspaceId, sourceId)
+    Queue-->>Ingestion: Job Acknowledged
+    Ingestion-->>Client: 202 Accepted (Ingestion Initialized)
+
+    Note over Worker: Worker Pulls Job from Queue
+    Worker->>Firestore: Update Status (status='validating')
+    Worker->>Storage: Retrieve Raw File Blob
+    Worker->>Parser: Parse file (extract text / demux audio & transcribe)
+    Parser-->>Worker: Raw Text / Transcript String
+
+    Worker->>Firestore: Update Status (status='chunking')
+    Worker->>Worker: Apply Semantic Chunking (384 tokens with 48 overlap)
+    Worker->>Firestore: Update Status (status='embedding')
+    Worker->>Embed: Request 1024-Dimension Batched Embeddings
+    Embed-->>Worker: Scored Dense Vectors
+
+    Worker->>Firestore: Update Status (status='indexing')
+    Worker->>Qdrant: Upsert Chunk Vectors and Payloads
+    Qdrant-->>Worker: Upsert Confirmed
+    Worker->>Firestore: Write Chunk Metadata, set status='ready'
+    Queue-->>Worker: Job Completed
+```
+
+---
+
+## Performance Engineering
 
 * **Connection Leak Protection**: Express controller routes listen to client connection closures and map `req.signal` downstream via custom `AbortController` boundaries. If a user cancels a query, upstream AI streams are terminated instantly to save token costs.
 * **Thread-Safe Video Processing**: Background workers execute media operations within isolated sandboxed folders. Scoped `try...finally` boundaries ensure that temporary `/tmp/ws-vid-seg-*` directories are always cleaned up, even during unexpected task failures.
@@ -460,16 +409,16 @@ flowchart TD
 
 ---
 
-## ✦ Security & Reliability
+## Security and Reliability
 
 * **Secure Credentials**: Production configurations block all localhost fallbacks. The application crashes immediately at startup if keys like `REDIS_URL` or `QDRANT_URL` are missing or misconfigured.
-* **Helmet Hardening**: Configured 13 HTTP protection headers to defend against Cross-Site Scripting (XSS), clickjacking, and mime-sniffing exploits.
+* **Helmet Hardening**: Configures 13 HTTP protection headers to defend against Cross-Site Scripting (XSS), clickjacking, and mime-sniffing exploits.
 * **CORS Origin Shields**: Hardened REST gateways to allow requests exclusively from Vercel deployment domains and verified local development hosts.
 * **Firebase Token Validation**: All authenticated workspace API routes enforce JWT token decoding and verify user ID matching prior to executing database queries.
 
 ---
 
-## ✦ Design Philosophy
+## Engineering Principles
 
 We believe learning should be active, conversational, and non-linear. 
 
@@ -479,7 +428,7 @@ SheryAI shifts the paradigm. We turn static resources into conversational, struc
 
 ---
 
-## ✦ Future Roadmap
+## Roadmap
 
 * **Multimodal Retrieval**: Parse slides, visual charts, and blackboard frames into the semantic workspace context.
 * **Collaborative Classrooms**: Allow multiple students to query a workspace concurrently, generating real-time group study graphs.
@@ -488,15 +437,13 @@ SheryAI shifts the paradigm. We turn static resources into conversational, struc
 
 ---
 
-## ✦ Join the Future of AI Learning
+## Contributing
 
-SheryAI is an open-source project created to provide next-generation academic tutoring capabilities. If you love this project and want to build the future of AI learning tools with us:
+SheryAI is an open-source project created to provide next-generation academic tutoring capabilities. If you want to contribute to the codebase:
 
-* ⭐️ **Star the repository** to show your support and help other developers find us.
-* 🍴 **Fork the project** and start contributing code updates.
-* 🐛 **Submit issues** or feature requests on our tracker boards.
-
-Let's build a smarter, more accessible future together.
+* **Star the repository** to show your support and help other developers find us.
+* **Fork the project** and start contributing code updates.
+* **Submit issues** or feature requests on our tracker boards.
 
 ---
 
