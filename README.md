@@ -43,42 +43,64 @@ SheryAI shifts the paradigm of digital learning from passive consumption to acti
 
 ---
 
-## ✦ Full Platform Preview
+## ✦ Platform Preview
 
-### 1. Landing Page
-*A sleek, glassmorphic dark-mode gateway designed to onboard users with vibrant micro-animations, product metrics, and clear service configurations.*
+## 1. Landing Page
+
+Modern AI-native onboarding interface with cinematic gradients, adaptive layout system, and semantic navigation architecture.
+
 <div align="center">
-  <img src="https://raw.githubusercontent.com/madhavansingh/Shery/main/previews/landing.png" alt="SheryAI Landing Gateway" width="90%" style="border-radius: 8px; border: 1px solid #1c1d24;" />
+  <img src="./assets/readme/landing-page.png" alt="SheryAI Landing Page" width="100%" />
 </div>
 
-### 2. AI Workspace
-*The central control deck where academic documents and lecture timelines are unified into an intuitive, dual-pane interactive dashboard.*
+---
+
+## 2. AI Workspace
+
+Unified academic intelligence workspace integrating lecture ingestion, document synchronization, semantic retrieval, and contextual memory systems.
+
 <div align="center">
-  <img src="https://raw.githubusercontent.com/madhavansingh/Shery/main/previews/workspace.png" alt="SheryAI AI Workspace" width="90%" style="border-radius: 8px; border: 1px solid #1c1d24;" />
+  <img src="./assets/readme/workspace-dashboard.png" alt="SheryAI Workspace" width="100%" />
 </div>
 
-### 3. Lecture Intelligence
-*Real-time audio extraction and state machine indicators tracking processing steps from validation to deep-transcription segments.*
+---
+
+## 3. Lecture Intelligence
+
+Real-time audio extraction, transactional state tracking, and state machine virtualization pipeline converting media files into transcription segments.
+
 <div align="center">
-  <img src="https://raw.githubusercontent.com/madhavansingh/Shery/main/previews/lecture.png" alt="SheryAI Lecture Intelligence" width="90%" style="border-radius: 8px; border: 1px solid #1c1d24;" />
+  <img src="./assets/readme/lecture-intelligence.png" alt="SheryAI Lecture Intelligence" width="100%" />
 </div>
 
-### 4. Semantic Pinned Tutor
-*Contextual dialogue drawer allowing students to execute temporal queries and click timestamps to jump directly to target segments in video streams.*
+---
+
+## 4. Semantic Tutor
+
+Context-locked learning dialog interface supporting temporal references, interactive video synchronization, and grounded cognitive chat.
+
 <div align="center">
-  <img src="https://raw.githubusercontent.com/madhavansingh/Shery/main/previews/tutor.png" alt="SheryAI Semantic Pinned Tutor" width="90%" style="border-radius: 8px; border: 1px solid #1c1d24;" />
+  <img src="./assets/readme/semantic-tutor.png" alt="SheryAI Semantic Tutor" width="100%" />
 </div>
 
-### 5. Knowledge Dashboard
-*Auto-generated timelines, concept gap diagnostics, smart flashcards, practice exams, and visual summaries compiled in one unified suite.*
+---
+
+## 5. Knowledge Dashboard
+
+Unified academic diagnostic suite presenting automated flashcards, quiz generation, cognitive gap analysis, and interactive lesson timelines.
+
 <div align="center">
-  <img src="https://raw.githubusercontent.com/madhavansingh/Shery/main/previews/dashboard.png" alt="SheryAI Knowledge Dashboard" width="90%" style="border-radius: 8px; border: 1px solid #1c1d24;" />
+  <img src="./assets/readme/knowledge-dashboard.png" alt="SheryAI Knowledge Dashboard" width="100%" />
 </div>
 
-### 6. AI Search Experience
-*A lightning-fast, hybrid search interface returning fused dense-vector and BM25 search results with granular source attribution scores.*
+---
+
+## 6. AI Search Experience
+
+High-performance search interface utilizing Reciprocal Rank Fusion (RRF) to merge semantic vector queries with lexical BM25 database scoring.
+
 <div align="center">
-  <img src="https://raw.githubusercontent.com/madhavansingh/Shery/main/previews/search.png" alt="SheryAI AI Search Experience" width="90%" style="border-radius: 8px; border: 1px solid #1c1d24;" />
+  <img src="./assets/readme/ai-search.png" alt="SheryAI AI Search Experience" width="100%" />
 </div>
 
 ---
