@@ -39,6 +39,10 @@ class FirebaseConfig {
       return admin.app();
     }
 
+    console.log("Firebase project:", process.env.FIREBASE_PROJECT_ID);
+    console.log("Firebase email exists:", !!process.env.FIREBASE_CLIENT_EMAIL);
+    console.log("Private key prefix:", process.env.FIREBASE_PRIVATE_KEY?.slice(0, 40));
+
     const serviceAccount = this.parseServiceAccount();
     const appConfig = {
       credential: admin.credential.cert(serviceAccount),
