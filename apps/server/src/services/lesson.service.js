@@ -284,9 +284,10 @@ class LessonService {
     };
   }
 
-  async deleteFailedByCourse(courseId) {
+  async deleteFailedByCourse(courseId, { onlyCreatedBy = null } = {}) {
     const failed = (await this.lessonRepository.findAllByCourseId(courseId))
-      .filter((lesson) => lesson.status === 'failed');
+      .filter((lesson) => lesson.status === 'failed')
+      .filter((lesson) => !onlyCreatedBy || lesson.createdBy === onlyCreatedBy);
 
     const results = [];
     for (const lesson of failed) {
@@ -302,7 +303,7 @@ class LessonService {
   async getVideo(lessonId, options = {}) {
     const lesson = await this.getById(lessonId);
 
-    if (lesson.storagePath?.startsWith('supabase:')) {
+    if (this.videoStorageService.isCloudStoragePath(lesson.storagePath)) {
       const signedUrl = await this.videoStorageService.getSignedVideoUrl(lesson.storagePath);
       if (signedUrl) return { type: 'redirect', url: signedUrl };
       if (!lesson.videoUrl) throw new AppError('Video file not found in cloud storage.', 404);
@@ -329,7 +330,7 @@ class LessonService {
   async getPlaybackUrl(lessonId) {
     const lesson = await this.getById(lessonId);
 
-    if (lesson.storagePath?.startsWith('supabase:')) {
+    if (this.videoStorageService.isCloudStoragePath(lesson.storagePath)) {
       const signedUrl = await this.videoStorageService.getSignedVideoUrl(lesson.storagePath);
       if (!signedUrl) throw new AppError('Video file not found in cloud storage.', 404);
 
